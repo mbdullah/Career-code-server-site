@@ -24,6 +24,7 @@ async function run() {
     await client.connect();
 
     const jobCollection = client.db('Career_Code').collection('jobs');
+    const applicationsCollection = client.db('Career_Code').collection('applications')
 
     // Jobs Api
 
@@ -38,6 +39,36 @@ async function run() {
       const id = req.params.id;
       const query = {_id : new ObjectId(id)}
       const result = await jobCollection.findOne(query)
+      res.send(result)
+    })
+
+    // Job Application related Api
+
+    app.get('/applications', async(req, res) => {
+      const email = req.query.email;
+      const query = {applicant : email}
+      const result = await applicationsCollection.find(query).toArray();
+      for(const application of result){
+        const jobId = application.jobId;
+        const jobQuery = {_id : new ObjectId(jobId)}
+        const job = await jobCollection.findOne(jobQuery);
+        application.company = job.company;
+        application.title = job.title;
+        application.company_logo = job.company_logo;
+      }
+      res.send(result);
+    })
+
+    app.post('/applications', async(req, res) => {
+      const application = req.body;
+      const result = await applicationsCollection.insertOne(application);
+      res.send(result);
+    })
+
+    app.delete("/applications/:id", async(req, res)=> {
+      const id = req.params.id;
+      const query = {_id : new ObjectId(id)}
+      const result = await applicationsCollection.deleteOne(query);
       res.send(result)
     })
 
