@@ -1,11 +1,38 @@
 const express = require("express");
 const app = express();
+const jwt = require("jsonwebtoken");
+const cookieParser = require('cookie-parser');
 const cors = require("cors");
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173'],
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
+
+const logger = (req, res, next) => {
+  console.log("inside the custom middleware");
+  next();
+}
+
+const verify = (req, res, next) => {
+  const token = req?.cookies?.token
+  if(!token){
+    return res.status(401).send({message : 'unauthorized access'})
+  }
+
+  // Verify the token
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
+    if(err){
+      return res.status(401).send({message : 'unauthorized access'})
+    }
+    req.decoded = decoded;
+    next();
+  })
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.jsryxpo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -25,6 +52,19 @@ async function run() {
     const applicationsCollection = client
       .db("Career_Code")
       .collection("applications");
+
+      // jwt related api
+     app.post("/jwt", async(req, res) => {
+      const userData = req.body;
+      const token = jwt.sign(userData, process.env.JWT_ACCESS_SECRET, {expiresIn: '1d'});
+
+      // set token in the cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false
+      })
+      res.send({success : true})
+     })
 
     // Jobs Api
 
@@ -54,8 +94,12 @@ async function run() {
 
     // Job Application related Api
 
-    app.get("/applications", async (req, res) => {
+    app.get("/applications",logger, verify, async (req, res) => {
       const email = req.query.email;
+      // console.log("Inside Applications Api", req.cookies);
+      if(email !== req.decoded.email){
+        return res.status(403).send({message: 'forbidden access'})
+      }
       const query = { applicant: email };
       const result = await applicationsCollection.find(query).toArray();
       for (const application of result) {
@@ -71,6 +115,7 @@ async function run() {
 
     app.get("/applications/job/:job_id", async (req, res) => {
       const job_id = req.params.job_id;
+      
       const query = {
         jobId: job_id,
       };
